@@ -22,10 +22,15 @@ let touchStartX = 0;
 let touchStartY = 0;
 let touchDeltaX = 0;
 let touchDeltaY = 0;
+let touchDragging = false;
 
 function on(el, event, handler, options) {
   if (!el) return;
   el.addEventListener(event, handler, options);
+}
+
+function isViewportZoomed() {
+  return Boolean(window.visualViewport && window.visualViewport.scale > 1.01);
 }
 
 function captionFromSrc(src, fallback) {
@@ -119,6 +124,40 @@ function closeLightbox() {
 
 function showNextPhoto(step) {
   updateLightbox(lightboxIndex + step);
+}
+
+function resetLightboxImagePosition(animated = true) {
+  if (!lightboxImageEl) return;
+  lightboxImageEl.style.transition = animated ? "transform 220ms ease, opacity 220ms ease" : "none";
+  lightboxImageEl.style.transform = "translateX(0)";
+  lightboxImageEl.style.opacity = "1";
+}
+
+function animatePhotoChange(direction) {
+  if (!lightboxImageEl) {
+    showNextPhoto(direction);
+    return;
+  }
+
+  const outX = direction > 0 ? -window.innerWidth : window.innerWidth;
+  const inX = direction > 0 ? window.innerWidth * 0.22 : -window.innerWidth * 0.22;
+
+  lightboxImageEl.style.transition = "transform 180ms ease, opacity 180ms ease";
+  lightboxImageEl.style.transform = `translateX(${outX}px)`;
+  lightboxImageEl.style.opacity = "0.2";
+
+  window.setTimeout(() => {
+    showNextPhoto(direction);
+    lightboxImageEl.style.transition = "none";
+    lightboxImageEl.style.transform = `translateX(${inX}px)`;
+    lightboxImageEl.style.opacity = "0.2";
+
+    requestAnimationFrame(() => {
+      lightboxImageEl.style.transition = "transform 220ms ease, opacity 220ms ease";
+      lightboxImageEl.style.transform = "translateX(0)";
+      lightboxImageEl.style.opacity = "1";
+    });
+  }, 170);
 }
 
 function findBirthdayImage() {
@@ -293,7 +332,7 @@ on(
   lightboxEl,
   "wheel",
   (event) => {
-    if (!lightboxEl || lightboxEl.hidden || Math.abs(event.deltaY) < 8) return;
+    if (!lightboxEl || lightboxEl.hidden || isViewportZoomed() || Math.abs(event.deltaY) < 8) return;
     event.preventDefault();
     const now = Date.now();
     if (now - lastWheelAt < 180) return;
@@ -310,6 +349,11 @@ on(lightboxEl, "touchstart", (event) => {
   touchStartY = touch.clientY;
   touchDeltaX = 0;
   touchDeltaY = 0;
+  touchDragging = false;
+  if (isViewportZoomed()) return;
+  if (lightboxImageEl) {
+    lightboxImageEl.style.transition = "none";
+  }
 });
 
 on(
@@ -317,13 +361,21 @@ on(
   "touchmove",
   (event) => {
     if (!lightboxEl || lightboxEl.hidden || event.touches.length !== 1) return;
+    if (isViewportZoomed()) return;
     const touch = event.touches[0];
     touchDeltaX = touch.clientX - touchStartX;
     touchDeltaY = touch.clientY - touchStartY;
 
     // Prevent page pan when user is clearly swiping across photos.
-    if (Math.abs(touchDeltaX) > Math.abs(touchDeltaY) + 8) {
+    if (Math.abs(touchDeltaX) > Math.abs(touchDeltaY) + 12) {
+      touchDragging = true;
       event.preventDefault();
+      if (lightboxImageEl) {
+        const limitedX = Math.max(-window.innerWidth * 0.9, Math.min(window.innerWidth * 0.9, touchDeltaX));
+        const opacity = Math.max(0.45, 1 - Math.abs(limitedX) / (window.innerWidth * 1.2));
+        lightboxImageEl.style.transform = `translateX(${limitedX}px)`;
+        lightboxImageEl.style.opacity = String(opacity);
+      }
     }
   },
   { passive: false }
@@ -331,13 +383,25 @@ on(
 
 on(lightboxEl, "touchend", () => {
   if (!lightboxEl || lightboxEl.hidden) return;
+  if (isViewportZoomed()) {
+    resetLightboxImagePosition(false);
+    return;
+  }
 
-  const minSwipeDistance = 44;
-  const isHorizontalSwipe = Math.abs(touchDeltaX) > Math.abs(touchDeltaY) + 12;
-  if (!isHorizontalSwipe || Math.abs(touchDeltaX) < minSwipeDistance) return;
+  const minSwipeDistance = Math.max(90, window.innerWidth * 0.18);
+  const isHorizontalSwipe = Math.abs(touchDeltaX) > Math.abs(touchDeltaY) + 16;
+
+  if (!touchDragging || !isHorizontalSwipe || Math.abs(touchDeltaX) < minSwipeDistance) {
+    resetLightboxImagePosition(true);
+    return;
+  }
 
   // Swipe left -> next image, swipe right -> previous image.
-  showNextPhoto(touchDeltaX < 0 ? 1 : -1);
+  animatePhotoChange(touchDeltaX < 0 ? 1 : -1);
+});
+
+on(lightboxEl, "touchcancel", () => {
+  resetLightboxImagePosition(true);
 });
 
 on(birthdayCloseEl, "click", closeBirthdayIntro);
