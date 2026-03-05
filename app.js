@@ -19,12 +19,22 @@ let confettiAnimationId = null;
 let confettiResizeHandler = null;
 let lastWheelAt = 0;
 
+function on(el, event, handler, options) {
+  if (!el) return;
+  el.addEventListener(event, handler, options);
+}
+
 function captionFromSrc(src, fallback) {
   if (typeof src !== "string" || !src) return fallback;
 
   const lastSegment = src.split("/").pop() || src;
   const withoutExtension = lastSegment.replace(/\.[a-z0-9]+$/i, "");
-  const decoded = decodeURIComponent(withoutExtension);
+  let decoded = withoutExtension;
+  try {
+    decoded = decodeURIComponent(withoutExtension);
+  } catch {
+    decoded = withoutExtension;
+  }
 
   return decoded.replace(/[_-]+/g, " ").trim() || fallback;
 }
@@ -51,6 +61,7 @@ function normalizePhoto(photo, index) {
 }
 
 function renderGallery() {
+  if (!galleryEl) return;
   galleryEl.innerHTML = "";
 
   if (!galleryItems.length) {
@@ -81,7 +92,7 @@ function clampIndex(index) {
 }
 
 function updateLightbox(index) {
-  if (!galleryItems.length) return;
+  if (!galleryItems.length || !lightboxImageEl || !lightboxCounterEl) return;
   lightboxIndex = clampIndex(index);
   const current = galleryItems[lightboxIndex];
   lightboxImageEl.src = current.src;
@@ -90,13 +101,14 @@ function updateLightbox(index) {
 }
 
 function openLightbox(index) {
-  if (!galleryItems.length) return;
+  if (!galleryItems.length || !lightboxEl) return;
   updateLightbox(index);
   lightboxEl.hidden = false;
   document.body.style.overflow = "hidden";
 }
 
 function closeLightbox() {
+  if (!lightboxEl) return;
   lightboxEl.hidden = true;
   document.body.style.overflow = "";
 }
@@ -112,6 +124,7 @@ function findBirthdayImage() {
 }
 
 function startConfetti(durationMs = 3400) {
+  if (!confettiCanvasEl || !birthdayOverlayEl) return;
   const canvas = confettiCanvasEl;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
@@ -184,7 +197,7 @@ function stopConfetti() {
 }
 
 function showBirthdayIntro() {
-  if (!birthdayOverlayEl) return;
+  if (!birthdayOverlayEl || !birthdayImageEl) return;
 
   const birthdaySrc = findBirthdayImage();
   birthdayImageEl.src = birthdaySrc;
@@ -195,6 +208,7 @@ function showBirthdayIntro() {
 }
 
 function closeBirthdayIntro() {
+  if (!birthdayOverlayEl) return;
   birthdayOverlayEl.hidden = true;
   stopConfetti();
   if (lightboxEl.hidden) {
@@ -204,8 +218,12 @@ function closeBirthdayIntro() {
 
 function addManifestPhotos(sourcePhotos) {
   sourcePhotos.forEach((photo, index) => {
-    const normalized = normalizePhoto(photo, index);
-    if (normalized.src) galleryItems.push(normalized);
+    try {
+      const normalized = normalizePhoto(photo, index);
+      if (normalized.src) galleryItems.push(normalized);
+    } catch {
+      // Skip malformed entries instead of breaking the full gallery.
+    }
   });
 }
 
@@ -254,23 +272,24 @@ function loadDevicePhotos(files) {
   renderGallery();
 }
 
-fileInputEl.addEventListener("change", (event) => {
+on(fileInputEl, "change", (event) => {
   const { files } = event.target;
   if (!files || !files.length) return;
   loadDevicePhotos(files);
   fileInputEl.value = "";
 });
 
-lightboxCloseEl.addEventListener("click", closeLightbox);
-lightboxPrevEl.addEventListener("click", () => showNextPhoto(-1));
-lightboxNextEl.addEventListener("click", () => showNextPhoto(1));
-lightboxEl.addEventListener("click", (event) => {
+on(lightboxCloseEl, "click", closeLightbox);
+on(lightboxPrevEl, "click", () => showNextPhoto(-1));
+on(lightboxNextEl, "click", () => showNextPhoto(1));
+on(lightboxEl, "click", (event) => {
   if (event.target === lightboxEl) closeLightbox();
 });
-lightboxEl.addEventListener(
+on(
+  lightboxEl,
   "wheel",
   (event) => {
-    if (lightboxEl.hidden || Math.abs(event.deltaY) < 8) return;
+    if (!lightboxEl || lightboxEl.hidden || Math.abs(event.deltaY) < 8) return;
     event.preventDefault();
     const now = Date.now();
     if (now - lastWheelAt < 180) return;
@@ -280,18 +299,18 @@ lightboxEl.addEventListener(
   { passive: false }
 );
 
-birthdayCloseEl.addEventListener("click", closeBirthdayIntro);
-birthdayOverlayEl.addEventListener("click", (event) => {
+on(birthdayCloseEl, "click", closeBirthdayIntro);
+on(birthdayOverlayEl, "click", (event) => {
   if (event.target === birthdayOverlayEl) closeBirthdayIntro();
 });
 
 document.addEventListener("keydown", (event) => {
-  if (!birthdayOverlayEl.hidden && event.key === "Escape") {
+  if (birthdayOverlayEl && !birthdayOverlayEl.hidden && event.key === "Escape") {
     closeBirthdayIntro();
     return;
   }
 
-  if (lightboxEl.hidden) return;
+  if (!lightboxEl || lightboxEl.hidden) return;
   if (event.key === "Escape") closeLightbox();
   if (event.key === "ArrowRight") showNextPhoto(1);
   if (event.key === "ArrowLeft") showNextPhoto(-1);
