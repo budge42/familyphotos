@@ -2,8 +2,22 @@ const galleryEl = document.getElementById("gallery");
 const emptyStateEl = document.getElementById("emptyState");
 const fileInputEl = document.getElementById("fileInput");
 const photoCardTemplate = document.getElementById("photoCardTemplate");
+const birthdayOverlayEl = document.getElementById("birthdayOverlay");
+const birthdayImageEl = document.getElementById("birthdayImage");
+const birthdayCloseEl = document.getElementById("birthdayClose");
+const confettiCanvasEl = document.getElementById("confettiCanvas");
+const lightboxEl = document.getElementById("lightbox");
+const lightboxImageEl = document.getElementById("lightboxImage");
+const lightboxCounterEl = document.getElementById("lightboxCounter");
+const lightboxCloseEl = document.getElementById("lightboxClose");
+const lightboxPrevEl = document.getElementById("lightboxPrev");
+const lightboxNextEl = document.getElementById("lightboxNext");
 
 const galleryItems = [];
+let lightboxIndex = 0;
+let confettiAnimationId = null;
+let confettiResizeHandler = null;
+let lastWheelAt = 0;
 
 function captionFromSrc(src, fallback) {
   if (typeof src !== "string" || !src) return fallback;
@@ -19,20 +33,20 @@ function normalizePhoto(photo, index) {
   const fallback = `Photo ${index + 1}`;
 
   if (typeof photo === "string") {
-    const caption = captionFromSrc(photo, fallback);
+    const label = captionFromSrc(photo, fallback);
     return {
       src: photo,
-      caption,
-      alt: caption,
+      caption: "",
+      alt: label,
     };
   }
 
-  const caption = photo.caption || captionFromSrc(photo.src, fallback);
+  const label = photo.caption || captionFromSrc(photo.src, fallback);
 
   return {
     src: photo.src,
-    caption,
-    alt: photo.alt || caption,
+    caption: photo.caption || "",
+    alt: photo.alt || label,
   };
 }
 
@@ -49,16 +63,143 @@ function renderGallery() {
   galleryItems.forEach((photo, index) => {
     const card = photoCardTemplate.content.firstElementChild.cloneNode(true);
     card.style.animationDelay = `${Math.min(index * 35, 420)}ms`;
+    card.setAttribute("aria-label", `Open photo ${index + 1}`);
 
     const img = card.querySelector("img");
-    const caption = card.querySelector("figcaption");
 
     img.src = photo.src;
     img.alt = photo.alt;
-    caption.textContent = photo.caption;
+    card.addEventListener("click", () => openLightbox(index));
 
     galleryEl.appendChild(card);
   });
+}
+
+function clampIndex(index) {
+  if (!galleryItems.length) return 0;
+  return (index + galleryItems.length) % galleryItems.length;
+}
+
+function updateLightbox(index) {
+  if (!galleryItems.length) return;
+  lightboxIndex = clampIndex(index);
+  const current = galleryItems[lightboxIndex];
+  lightboxImageEl.src = current.src;
+  lightboxImageEl.alt = current.alt || `Photo ${lightboxIndex + 1}`;
+  lightboxCounterEl.textContent = `${lightboxIndex + 1} / ${galleryItems.length}`;
+}
+
+function openLightbox(index) {
+  if (!galleryItems.length) return;
+  updateLightbox(index);
+  lightboxEl.hidden = false;
+  document.body.style.overflow = "hidden";
+}
+
+function closeLightbox() {
+  lightboxEl.hidden = true;
+  document.body.style.overflow = "";
+}
+
+function showNextPhoto(step) {
+  updateLightbox(lightboxIndex + step);
+}
+
+function findBirthdayImage() {
+  const preferred = galleryItems.find((item) => /100[ _-]?0022/i.test(item.src));
+  if (preferred) return preferred.src;
+  return galleryItems[0]?.src || "";
+}
+
+function startConfetti(durationMs = 3400) {
+  const canvas = confettiCanvasEl;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  const colors = ["#ffd166", "#ef476f", "#06d6a0", "#118ab2", "#ffffff"];
+  const particles = [];
+  const targetCount = Math.max(120, Math.floor(window.innerWidth / 8));
+  const endAt = performance.now() + durationMs;
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+
+  resize();
+  confettiResizeHandler = resize;
+  window.addEventListener("resize", confettiResizeHandler);
+
+  for (let i = 0; i < targetCount; i += 1) {
+    particles.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height - canvas.height,
+      size: 3 + Math.random() * 6,
+      speedY: 1.2 + Math.random() * 3.6,
+      speedX: -1.2 + Math.random() * 2.4,
+      rotation: Math.random() * Math.PI * 2,
+      rotationSpeed: -0.08 + Math.random() * 0.16,
+      color: colors[Math.floor(Math.random() * colors.length)],
+    });
+  }
+
+  function frame(now) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const particle of particles) {
+      particle.x += particle.speedX;
+      particle.y += particle.speedY;
+      particle.rotation += particle.rotationSpeed;
+      if (particle.y > canvas.height + 20) {
+        particle.y = -20;
+        particle.x = Math.random() * canvas.width;
+      }
+
+      ctx.save();
+      ctx.translate(particle.x, particle.y);
+      ctx.rotate(particle.rotation);
+      ctx.fillStyle = particle.color;
+      ctx.fillRect(-particle.size / 2, -particle.size / 2, particle.size, particle.size);
+      ctx.restore();
+    }
+
+    if (now < endAt && !birthdayOverlayEl.hidden) {
+      confettiAnimationId = requestAnimationFrame(frame);
+    } else {
+      confettiAnimationId = null;
+    }
+  }
+
+  confettiAnimationId = requestAnimationFrame(frame);
+}
+
+function stopConfetti() {
+  if (confettiAnimationId) {
+    cancelAnimationFrame(confettiAnimationId);
+    confettiAnimationId = null;
+  }
+  if (confettiResizeHandler) {
+    window.removeEventListener("resize", confettiResizeHandler);
+    confettiResizeHandler = null;
+  }
+}
+
+function showBirthdayIntro() {
+  if (!birthdayOverlayEl) return;
+
+  const birthdaySrc = findBirthdayImage();
+  birthdayImageEl.src = birthdaySrc;
+  birthdayImageEl.hidden = !birthdaySrc;
+  birthdayOverlayEl.hidden = false;
+  document.body.style.overflow = "hidden";
+  startConfetti();
+}
+
+function closeBirthdayIntro() {
+  birthdayOverlayEl.hidden = true;
+  stopConfetti();
+  if (lightboxEl.hidden) {
+    document.body.style.overflow = "";
+  }
 }
 
 function addManifestPhotos(sourcePhotos) {
@@ -120,4 +261,40 @@ fileInputEl.addEventListener("change", (event) => {
   fileInputEl.value = "";
 });
 
-loadManifestPhotos();
+lightboxCloseEl.addEventListener("click", closeLightbox);
+lightboxPrevEl.addEventListener("click", () => showNextPhoto(-1));
+lightboxNextEl.addEventListener("click", () => showNextPhoto(1));
+lightboxEl.addEventListener("click", (event) => {
+  if (event.target === lightboxEl) closeLightbox();
+});
+lightboxEl.addEventListener(
+  "wheel",
+  (event) => {
+    if (lightboxEl.hidden || Math.abs(event.deltaY) < 8) return;
+    event.preventDefault();
+    const now = Date.now();
+    if (now - lastWheelAt < 180) return;
+    lastWheelAt = now;
+    showNextPhoto(event.deltaY > 0 ? 1 : -1);
+  },
+  { passive: false }
+);
+
+birthdayCloseEl.addEventListener("click", closeBirthdayIntro);
+birthdayOverlayEl.addEventListener("click", (event) => {
+  if (event.target === birthdayOverlayEl) closeBirthdayIntro();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (!birthdayOverlayEl.hidden && event.key === "Escape") {
+    closeBirthdayIntro();
+    return;
+  }
+
+  if (lightboxEl.hidden) return;
+  if (event.key === "Escape") closeLightbox();
+  if (event.key === "ArrowRight") showNextPhoto(1);
+  if (event.key === "ArrowLeft") showNextPhoto(-1);
+});
+
+loadManifestPhotos().finally(showBirthdayIntro);

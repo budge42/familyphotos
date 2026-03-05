@@ -16,12 +16,11 @@
     <div class="page">
       <header class="top">
         <div>
-          <p class="eyebrow">Family Moments</p>
-          <h1>Our Photo Gallery</h1>
-          <p class="subtitle">A simple place to keep and share memories.</p>
+          <h1>Budge Family Photos</h1>
+          <p class="subtitle">Our place to share and keep memories safe.</p>
         </div>
         <div class="actions">
-          <label class="upload-btn" for="fileInput">Select photos</label>
+          <label class="upload-btn" for="fileInput">Upload photos</label>
           <input id="fileInput" type="file" accept="image/*" multiple />
         </div>
       </header>
@@ -32,7 +31,7 @@
           <h2>No photos yet</h2>
           <p>
             Add files to <code>photos/</code> and list them in
-            <code>photos/photos.js</code>, or use Select photos for a quick
+            <code>photos/photos.js</code>, or use Upload photos for a quick
             preview.
           </p>
         </section>
@@ -40,11 +39,29 @@
     </div>
 
     <template id="photoCardTemplate">
-      <figure class="card">
+      <button class="card" type="button">
         <img loading="lazy" />
-        <figcaption></figcaption>
-      </figure>
+      </button>
     </template>
+
+    <section id="birthdayOverlay" class="birthday-overlay" aria-live="polite" hidden>
+      <canvas id="confettiCanvas" class="confetti-canvas"></canvas>
+      <div class="birthday-card" role="dialog" aria-modal="true" aria-label="Happy Birthday">
+        <h2>Happy Birthday</h2>
+        <img id="birthdayImage" alt="Birthday memory" />
+        <button id="birthdayClose" class="primary-btn" type="button">View Photos</button>
+      </div>
+    </section>
+
+    <section id="lightbox" class="lightbox" hidden>
+      <button id="lightboxClose" class="lightbox-close" type="button" aria-label="Close photo">×</button>
+      <button id="lightboxPrev" class="lightbox-nav lightbox-prev" type="button" aria-label="Previous photo">
+        ‹
+      </button>
+      <img id="lightboxImage" class="lightbox-image" alt="" />
+      <button id="lightboxNext" class="lightbox-nav lightbox-next" type="button" aria-label="Next photo">›</button>
+      <p id="lightboxCounter" class="lightbox-counter"></p>
+    </section>
 
     <script src="photos/photos.js"></script>
     <script src="app.js" defer></script>
