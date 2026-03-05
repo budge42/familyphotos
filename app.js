@@ -18,6 +18,10 @@ let lightboxIndex = 0;
 let confettiAnimationId = null;
 let confettiResizeHandler = null;
 let lastWheelAt = 0;
+let touchStartX = 0;
+let touchStartY = 0;
+let touchDeltaX = 0;
+let touchDeltaY = 0;
 
 function on(el, event, handler, options) {
   if (!el) return;
@@ -298,6 +302,43 @@ on(
   },
   { passive: false }
 );
+
+on(lightboxEl, "touchstart", (event) => {
+  if (!lightboxEl || lightboxEl.hidden || event.touches.length !== 1) return;
+  const touch = event.touches[0];
+  touchStartX = touch.clientX;
+  touchStartY = touch.clientY;
+  touchDeltaX = 0;
+  touchDeltaY = 0;
+});
+
+on(
+  lightboxEl,
+  "touchmove",
+  (event) => {
+    if (!lightboxEl || lightboxEl.hidden || event.touches.length !== 1) return;
+    const touch = event.touches[0];
+    touchDeltaX = touch.clientX - touchStartX;
+    touchDeltaY = touch.clientY - touchStartY;
+
+    // Prevent page pan when user is clearly swiping across photos.
+    if (Math.abs(touchDeltaX) > Math.abs(touchDeltaY) + 8) {
+      event.preventDefault();
+    }
+  },
+  { passive: false }
+);
+
+on(lightboxEl, "touchend", () => {
+  if (!lightboxEl || lightboxEl.hidden) return;
+
+  const minSwipeDistance = 44;
+  const isHorizontalSwipe = Math.abs(touchDeltaX) > Math.abs(touchDeltaY) + 12;
+  if (!isHorizontalSwipe || Math.abs(touchDeltaX) < minSwipeDistance) return;
+
+  // Swipe left -> next image, swipe right -> previous image.
+  showNextPhoto(touchDeltaX < 0 ? 1 : -1);
+});
 
 on(birthdayCloseEl, "click", closeBirthdayIntro);
 on(birthdayOverlayEl, "click", (event) => {
